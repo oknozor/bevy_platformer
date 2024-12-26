@@ -1,40 +1,49 @@
-use crate::walls::LevelWalls;
 use bevy::prelude::*;
-use bevy_ecs_ldtk::{GridCoords, LdtkEntity};
+use bevy_ecs_ldtk::prelude::*;
+use bevy_rapier2d::dynamics::Velocity;
 
-#[derive(Default, Component)]
+use crate::{colliders::ColliderBundle, ground_detection::GroundDetection};
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Component)]
 pub struct Player;
 
-#[derive(Default, Bundle, LdtkEntity)]
+#[derive(Clone, Default, Bundle, LdtkEntity)]
 pub struct PlayerBundle {
-    player: Player,
     #[sprite_sheet]
-    sprite_sheet: Sprite,
-    #[grid_coords]
-    grid_coords: GridCoords,
+    pub sprite: Sprite,
+    #[from_entity_instance]
+    pub collider_bundle: ColliderBundle,
+    pub player: Player,
+    #[worldly]
+    pub worldly: Worldly,
+    pub ground_detection: GroundDetection,
+
+    // The whole EntityInstance can be stored directly as an EntityInstance component
+    #[from_entity_instance]
+    entity_instance: EntityInstance,
 }
 
-pub fn move_player_from_input(
-    mut players: Query<&mut GridCoords, With<Player>>,
+pub fn player_movement(
     input: Res<ButtonInput<KeyCode>>,
-    level_walls: Res<LevelWalls>,
+    mut query: Query<(&mut Velocity, &GroundDetection), With<Player>>,
 ) {
-    let movement_direction = if input.just_pressed(KeyCode::KeyW) {
-        GridCoords::new(0, 1)
-    } else if input.just_pressed(KeyCode::KeyA) {
-        GridCoords::new(-1, 0)
-    } else if input.just_pressed(KeyCode::KeyS) {
-        GridCoords::new(0, -1)
-    } else if input.just_pressed(KeyCode::KeyD) {
-        GridCoords::new(1, 0)
-    } else {
-        return;
-    };
+    for (mut velocity, ground_detection) in &mut query {
+        let right = if input.pressed(KeyCode::KeyD) { 1. } else { 0. };
+        let left = if input.pressed(KeyCode::KeyA) { 1. } else { 0. };
 
-    for mut player_grid_coords in players.iter_mut() {
-        let destination = *player_grid_coords + movement_direction;
-        if !level_walls.in_wall(&destination) {
-            *player_grid_coords = destination;
+        velocity.linvel.x = (right - left) * 200.;
+
+        if input.just_pressed(KeyCode::Space) && (ground_detection.on_ground) {
+            velocity.linvel.y = 500.;
         }
+    }
+}
+
+pub struct PlayerPlugin;
+
+impl Plugin for PlayerPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, player_movement)
+            .register_ldtk_entity::<PlayerBundle>("Player");
     }
 }
